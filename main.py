@@ -1,333 +1,254 @@
 """
-text-clustering-MD: Punto de Entrada Principal (Main Pipeline Orchestrator)
-=============================================================================
-Orquestador integral del proyecto de Minería de Datos / Text Clustering:
-1. Fase de Representación y Espacios Métricos (SBERT + Distancias Coseno / Euclídea).
-2. Fase de Clustering Jerárquico Aglomerativo Scratch (Lance-Williams 1967).
-3. Fase de Validación Interna (CPCC, Silhouette, SSE, BSS, Dunn, Selección k̂).
-4. Fase de Validación Externa (Rand, Jaccard, Fowlkes-Mallows, Purity, Kappa, F1).
-5. Fase Semántica, Holdout e Inferencia Prototípica (Codebook y Figuras 1-8).
+Orquestador Principal - Práctica 2: Clasificación Supervisada de Texto (Adrián - v3)
+===================================================================================
+Alternativas evaluadas sobre la partición oficial 70/15/15 (seed=42, stratify=y):
+  1. Baseline común: Clustering Jerárquico 384D.
+  2. Regresión Logística + SBERT 384D (L2, sin balancear).
+  3. Regresión Logística + TF-IDF Caracteres (sin balancear).
+  4. Mejora 384D: Regresión Logística + SBERT 384D (L2, pesos balanceados α).
+  5. Propuesta Síntesis: Regresión Logística + TF-IDF Caracteres (pesos balanceados α).
 
 Uso:
-    python main.py                         # Ejecuta el pipeline completo de inicio a fin
-    python main.py --step embeddings       # Ejecuta solo la generación de embeddings y distancias
-    python main.py --step evaluacion       # Ejecuta clustering, validación y figuras
-    python main.py --test                  # Ejecuta tests y toy-examples de verificación
-    python main.py --n_muestras 500        # Configura el número de muestras (por defecto 500)
+    python main_adrian.py
+    python main_adrian.py --reps_ruido 3   # Más rápido en RQ1 (~3 min)
 """
 
-import os
 import sys
+import json
 import time
-import warnings
 import argparse
+from collections import Counter
 from pathlib import Path
 
-# Silenciar advertencias informativas no críticas de Hugging Face Hub
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-warnings.filterwarnings("ignore", message=".*unauthenticated requests to the HF Hub.*")
-warnings.filterwarnings("ignore", message=".*You are sending unauthenticated requests.*")
-try:
-    from huggingface_hub.utils import logging as hf_logging
-    hf_logging.set_verbosity_error()
-except Exception:
-    pass
+import numpy as np
+import pandas as pd
 
-# Añadir la raíz del proyecto al sys.path para importaciones estándar
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import (
-    DATA_DIR,
+from src.particion_comun import cargar_particion_oficial_equipo
+from src.config_adrian import (
     RAW_DATA_FILE,
-    PROCESSED_DATA_DIR,
-    REPORTS_DIR,
-    DEFAULT_MODEL_NAME,
-    DEFAULT_N_SAMPLES,
-    ensure_directories,
+    CACHE_EMB_COMUN,
+    OUTPUT_DIR,
+    FIGURES_DIR,
+    RANDOM_SEED_OFICIAL,
+    SEEDS_ESTABILIDAD,
+    SBERT_MODEL_NAME,
+    SBERT_MAX_TOKENS,
+    NIVELES_RUIDO_LEXICO,
+    REPETICIONES_RUIDO,
+    crear_directorios_salida,
 )
+from src.representaciones_adrian import RepresentadorSBERT384D
+from src.modelos_adrian import (
+    Alternativa1BaselineClustering,
+    Alternativa2LogReg384D,
+    Alternativa3LogRegTFIDFChar,
+    Alternativa4LogReg384DBalanced,
+    Alternativa5LogRegTFIDFCharBalanced,
+    OptimizadorCV,
+)
+from src.evaluador_adrian import EvaluadorClasificacion
+from src.experimento_ruido_adrian import ExperimentoRobustezRuido
+from src.visualizador_adrian import VisualizadorPoster
 
 
-def ejecutar_paso_embeddings(csv_path=None, n_muestras=DEFAULT_N_SAMPLES, modelo=DEFAULT_MODEL_NAME):
-    """Fase 1: Carga de dataset, SBERT embeddings, matrices scratch y profiling."""
-    print("\n" + "=" * 70)
-    print(" [FASE 1] REPRESENTACIÓN VECTORIAL Y ESPACIOS MÉTRICOS")
-    print("=" * 70)
-
-    from pipeline import cargar_datos
-    from src.embeddings import (
-        generar_embeddings,
-        guardar_embeddings,
-        calcular_matriz_distancias_scratch,
-        guardar_matriz_distancias,
-        comparar_espacios_metricos,
-        perfilar_coste_computacional,
-    )
-    import json
-    import numpy as np
-
-    ruta_csv = str(csv_path or RAW_DATA_FILE)
-    carpeta_salida = str(PROCESSED_DATA_DIR)
-    ensure_directories()
-
-    # 1. Cargar textos
-    textos, etiquetas_reales = cargar_datos(ruta_csv, n_muestras)
-    N = len(textos)
-    if N == 0:
-        print(f"[ERROR] No hay textos disponibles en '{ruta_csv}'. Abortando Fase 1.")
-        return False
-
-    # 2. Generar embeddings
-    print(f"\n[1/5] Generando embeddings densos contextuales ({modelo})...")
-    t0 = time.time()
-    X = generar_embeddings(textos, nombre_modelo=modelo, normalizar=True)
-    print(f"      Embeddings generados en {time.time() - t0:.2f}s | Forma: {X.shape}")
-
-    # 3. Calcular matrices de distancia Scratch
-    print("\n[2/5] Calculando matrices de distancias en NumPy (Scratch)...")
-    t0 = time.time()
-    D_cos = calcular_matriz_distancias_scratch(X, metrica="cosine")
-    t_cos = time.time() - t0
-    t0 = time.time()
-    D_euc = calcular_matriz_distancias_scratch(X, metrica="euclidean")
-    t_euc = time.time() - t0
-    print(f"      Distancia Coseno:   {t_cos:.4f}s")
-    print(f"      Distancia Euclídea: {t_euc:.4f}s")
-
-    # 4. Comparativa de contraste métrico (Aggarwal et al., 2001)
-    print("\n[3/5] Evaluando contraste métrico y preservación topológica...")
-    ruta_grafico = os.path.join(carpeta_salida, "comparativa_distancias.png")
-    stats = comparar_espacios_metricos(X, D_cos, D_euc, ruta_grafico=ruta_grafico)
-    print(f"      Contraste Coseno:   {stats['cos_contraste_relativo']:.2f}")
-    print(f"      Contraste Euclídeo: {stats['euc_contraste_relativo']:.2f}")
-    print(f"      Correlación Pearson (Coseno vs Euclídeo): {stats['corr_pearson']:.4f}")
-
-    # 5. Profiling O(N^2)
-    print("\n[4/5] Profiling empírico de complejidad temporal y de memoria...")
-    profiling = perfilar_coste_computacional(X, lista_n=(100, 200, 300, 400, 500))
-
-    # Guardar métricas y artefactos
-    print("\n[5/5] Serializando artefactos intermedios en data_processed/...")
-    informe_cuantitativo = {
-        "estadisticas_espacios_metricos": stats,
-        "profiling_complejidad_computacional": profiling,
-    }
-    with open(os.path.join(carpeta_salida, "metricas_espacios_y_profiling.json"), "w", encoding="utf-8") as f:
-        json.dump(informe_cuantitativo, f, ensure_ascii=False, indent=2)
-
-    guardar_embeddings(X, os.path.join(carpeta_salida, "embeddings_sbert.npy"))
-    guardar_matriz_distancias(D_cos, os.path.join(carpeta_salida, "matriz_distancias_cosine.npy"))
-    guardar_matriz_distancias(D_euc, os.path.join(carpeta_salida, "matriz_distancias_euclidean.npy"))
-    np.save(os.path.join(carpeta_salida, "etiquetas_reales.npy"), etiquetas_reales)
-    with open(os.path.join(carpeta_salida, "textos_posts.json"), "w", encoding="utf-8") as f:
-        json.dump(textos, f, ensure_ascii=False, indent=2)
-
-    print(f"\n[OK] Fase 1 completada con éxito. Artefactos listos en '{carpeta_salida}'.")
-    return True
-
-
-def ejecutar_paso_evaluacion(k_max=None):
-    """Fase 2 & 3: Clustering, validación interna/externa, Holdout, figuras 1-8 e inferencia."""
-    print("\n" + "=" * 70)
-    print(" [FASE 2 Y 3] CLUSTERING JERÁRQUICO, VALIDACIÓN CIENTÍFICA E INFERENCIA")
-    print("=" * 70)
-
-    from src.evaluacion import ejecutar_evaluacion
-    ensure_directories()
-    resultados = ejecutar_evaluacion(
-        carpeta_datos=str(PROCESSED_DATA_DIR),
-        carpeta_salida=str(REPORTS_DIR),
-        k_max=k_max,
-    )
-    if resultados:
-        print("\n" + "=" * 70)
-        print(" [RESUMEN FINAL DE MÉTRICAS CIENTÍFICAS]")
-        print("=" * 70)
-        print(f"  - Coeficiente Cofenético (CPCC - Sokal & Rohlf): {resultados['cpcc']:.4f}")
-        print(f"  - Número Óptimo de Clusters Descubierto (k̂):     {resultados['k_optimo']}")
-        print(f"  - Silhouette Score en k̂:                         {resultados['silhouette_k_opt']:.4f}")
-        print(f"  - Pureza / Clustering Accuracy:                  {resultados['accuracy_pureza'] * 100:.2f}%")
-        print(f"  - Estadístico Kappa de Cohen:                    {resultados['kappa_cohen']:.4f}")
-        print(f"  - Macro F1-Score:                                {resultados['f1_macro']:.4f}")
-        print(f"  - Rand Index:                                    {resultados['rand_index']:.4f}")
-        print(f"  - Jaccard Index:                                 {resultados['jaccard']:.4f}")
-        print(f"  - Fowlkes-Mallows Index:                         {resultados['fowlkes_mallows']:.4f}")
-        print(f"  - Holdout Train Pureza:                          {resultados['holdout']['train']['accuracy_pureza'] * 100:.2f}%")
-        print(f"  - Holdout Test Pureza (no vistos):               {resultados['holdout']['test']['accuracy_pureza'] * 100:.2f}% (std 5-rep: {resultados['holdout']['test']['accuracy_std_5rep'] * 100:.2f}%)")
-        print(f"  - Holdout Test Weighted F1 (w.Avg):              {resultados['holdout']['test']['f1_weighted']:.4f}")
-        print(f"  - Holdout Train Rand:                            {resultados['holdout']['train']['rand']:.4f}")
-        print(f"  - Holdout Test Rand (no vistos):                 {resultados['holdout']['test']['rand']:.4f}")
-        print(f"\n[OK] 10 Figuras científicas disponibles en '{REPORTS_DIR}' (incluyendo el Heat-Map Fig 10).")
-    return resultados is not None
-
-
-def ejecutar_paso_experimentos():
-    """Fase 4: Ejecuta los experimentos científicos (Dimensión, Normalización, TF-IDF, Random y K-Means)."""
-    print("\n" + "=" * 70)
-    print(" [FASE 4] EVIDENCIAS EXPERIMENTALES (DIMENSIÓN, PREPROCESO Y BASELINES)")
-    print("=" * 70)
-    from src.experimentos import ejecutar_todos_los_experimentos
-    evidencias = ejecutar_todos_los_experimentos()
-    return evidencias is not None
-
-
-def ejecutar_toy():
-    """Ejecuta la demostración didáctica paso a paso sobre datos de juguete (toy-example)."""
-    from toy_example import ejecutar_toy_example
-    ejecutar_toy_example()
-    return True
+def detectar_clase_minoritaria(y_train: np.ndarray) -> str:
+    conteo = Counter(y_train)
+    clase_min, _ = conteo.most_common()[-1]
+    print("\nDistribución de clases en Train (70%, N=350):")
+    for cls, cnt in conteo.most_common():
+        marca = "  <-- CLASE MINORITARIA" if cls == clase_min else ""
+        print(f"  - {cls:<12s}: {cnt:3d} ({cnt / len(y_train) * 100:5.1f}%){marca}")
+    return str(clase_min)
 
 
 def main():
-    """
-    Punto de entrada principal para la orquestación integral del proyecto text-clustering-MD.
-
-    Pre-condiciones:
-        - Argumentos CLI proporcionados a través de sys.argv (opciones de fase, hiperparámetros y rutas).
-        - Dependencias del sistema y librerías de requirements.txt instaladas.
-    Post-condiciones:
-        - Orquesta la ejecución de las fases solicitadas (embeddings, evaluación, experimentos o toy-example).
-        - Genera los artefactos .npy/.json en data_processed/ y las figuras en graficas_informe/.
-        - Retorna código de salida del proceso (0 en éxito, 1 ante fallos).
-    """
-    parser = argparse.ArgumentParser(
-        description="Pipeline integral de Text Clustering (text-clustering-MD)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--step",
-        type=str,
-        choices=["all", "embeddings", "evaluacion", "experimentos", "toy"],
-        default="all",
-        help="Fase del pipeline a ejecutar ('all', 'embeddings', 'evaluacion', 'experimentos', 'toy')",
-    )
-    parser.add_argument(
-        "--n_muestras",
-        type=int,
-        default=DEFAULT_N_SAMPLES,
-        help=f"Número de posts de Reddit a procesar (por defecto {DEFAULT_N_SAMPLES})",
-    )
-    parser.add_argument(
-        "--modelo",
-        type=str,
-        default=DEFAULT_MODEL_NAME,
-        help=f"Modelo de Sentence-Transformers a utilizar (por defecto '{DEFAULT_MODEL_NAME}')",
-    )
-    parser.add_argument(
-        "--csv",
-        type=str,
-        default=str(RAW_DATA_FILE),
-        help="Ruta al archivo CSV con el corpus clínico de Reddit",
-    )
-    parser.add_argument(
-        "--toy",
-        "--toy-example",
-        "--test",
-        action="store_true",
-        dest="toy",
-        help="Ejecuta la demostración didáctica de algoritmos scratch sobre datos sintéticos (toy-example)",
-    )
-    parser.add_argument(
-        "--infer",
-        "--texto",
-        type=str,
-        default=None,
-        dest="infer",
-        help="Asigna un nuevo texto clínico a su cluster correspondiente y muestra los vecinos más cercanos dentro de él",
-    )
-    parser.add_argument(
-        "--k",
-        "-k",
-        type=int,
-        default=15,
-        help="Número de clusters para el corte del dendrograma (por defecto 15, o 5 para clases C-SSRS)",
-    )
-    parser.add_argument(
-        "--top_k",
-        type=int,
-        default=3,
-        help="Número de instancias más cercanas a mostrar dentro del cluster asignado (por defecto 3)",
-    )
-    parser.add_argument(
-        "--k_max",
-        type=int,
-        default=None,
-        help="Límite superior del espacio de búsqueda no supervisado para optimizar k en [2, k_max] (por defecto: floor(sqrt(N)))",
-    )
-
+    parser = argparse.ArgumentParser(description="Pipeline Clasificación Supervisada - Adrián (v3)")
+    parser.add_argument("--csv", type=str, default=str(RAW_DATA_FILE))
+    parser.add_argument("--reps_ruido", type=int, default=REPETICIONES_RUIDO)
     args = parser.parse_args()
-    t_global = time.time()
 
-    if args.infer:
-        print("\n" + "=" * 70)
-        print(" [INFERENCIA INTERACTIVA DE NUEVA INSTANCIA]")
-        print("=" * 70)
-        import json
-        import numpy as np
-        from src.evaluacion import inferir_y_mostrar_cercanos
-        from src.embeddings import generar_embeddings
-        from src.clustering.hierarchical import MotorJerarquico
-        from src.metricas_internas import cortar_dendrograma_scratch
+    t_inicio = time.time()
+    crear_directorios_salida()
 
-        emb_path = PROCESSED_DATA_DIR / "embeddings_sbert.npy"
-        dist_path = PROCESSED_DATA_DIR / "matriz_distancias_cosine.npy"
-        text_path = PROCESSED_DATA_DIR / "textos_posts.json"
+    print("=" * 82)
+    print(" PRÁCTICA 2: CLASIFICACIÓN SUPERVISADA DE TEXTO — ADRIÁN (v3: 5-Fold CV + Síntesis)")
+    print("=" * 82)
 
-        if not emb_path.exists() or not dist_path.exists() or not text_path.exists():
-            print("[ERROR] Artefactos procesados no encontrados. Ejecuta 'python main.py' primero.")
-            sys.exit(1)
-
-        X = np.load(str(emb_path))
-        D = np.load(str(dist_path))
-        with open(str(text_path), "r", encoding="utf-8") as f:
-            textos = json.load(f)
-
-        Z = MotorJerarquico(tipo_enlace="complete").fit(D)
-        etiquetas = cortar_dendrograma_scratch(Z, n_clusters=args.k)
-
-        print(f"Texto a inferir: \"{args.infer}\" (Corte en K = {args.k} clusters, mostrando Top-{args.top_k} vecinos)")
-        vector_nuevo = generar_embeddings([args.infer], nombre_modelo=args.modelo, normalizar=True)[0]
-        inferir_y_mostrar_cercanos(vector_nuevo, X, etiquetas, textos, k=args.top_k)
-        sys.exit(0)
-
-    if args.toy or args.step == "toy":
-        exito = ejecutar_toy()
-        sys.exit(0 if exito else 1)
-
-    # Verificar si existen los artefactos de Fase 1 para no repetir innecesariamente
-    fase1_necesaria = args.step in ["all", "embeddings"]
-    embeddings_listos = (
-        (PROCESSED_DATA_DIR / "embeddings_sbert.npy").exists()
-        and (PROCESSED_DATA_DIR / "matriz_distancias_cosine.npy").exists()
+    # 1. Partición oficial común del equipo (70/15/15, seed=42, stratify=y)
+    print("\n[PASO 1/6] Cargando partición oficial común del equipo...")
+    datos = cargar_particion_oficial_equipo(
+        ruta_csv=args.csv, ruta_cache_emb=str(CACHE_EMB_COMUN), seed=RANDOM_SEED_OFICIAL
     )
+    txt_tr, txt_dev, txt_te = datos["textos"]
+    X384_tr, X384_dev, X384_te = datos["X_384"]
+    y_tr, y_dev, y_te = datos["y"]
+    clases = datos["clases"]
 
-    if fase1_necesaria:
-        # Si se pide explícitamente embeddings o si no existen los archivos, ejecutar fase 1
-        if args.step == "embeddings" or not embeddings_listos:
-            exito1 = ejecutar_paso_embeddings(csv_path=args.csv, n_muestras=args.n_muestras, modelo=args.modelo)
-            if not exito1:
-                sys.exit(1)
-        else:
-            print(f"\n[INFO] Artefactos de embeddings ya existentes en '{PROCESSED_DATA_DIR}'.")
-            print("       (Para regenerarlos, ejecuta con '--step embeddings')")
+    clase_minoritaria = detectar_clase_minoritaria(y_tr)
+    textos_todos = np.concatenate([txt_tr, txt_dev, txt_te])
+    X384_todos = np.vstack([X384_tr, X384_dev, X384_te])
+    y_todos = np.concatenate([y_tr, y_dev, y_te])
 
-    if args.step in ["all", "evaluacion"]:
-        exito2 = ejecutar_paso_evaluacion(k_max=args.k_max)
-        if not exito2:
-            sys.exit(1)
+    evaluador = EvaluadorClasificacion(clases_ordenadas=clases, clase_minoritaria=clase_minoritaria)
 
-    if args.step in ["all", "experimentos"]:
-        exito3 = ejecutar_paso_experimentos()
-        if not exito3:
-            sys.exit(1)
+    # 2. Selección robusta de hiperparámetros mediante 5-Fold CV en Train (sin tocar Dev ni Test)
+    print("\n[PASO 2/6] Optimizando hiperparámetros con 5-Fold CV Estratificado en Train (350)...")
+    opt = OptimizadorCV(clase_minoritaria=clase_minoritaria, n_splits=5, random_state=RANDOM_SEED_OFICIAL)
 
-    print("\n" + "=" * 70)
-    print(f" PIPELINE COMPLETADO EXITOSAMENTE en {time.time() - t_global:.2f}s")
-    print("=" * 70 + "\n")
+    opt_alt2 = opt.optimizar_alternativa2(X384_tr, y_tr)
+    opt_alt3 = opt.optimizar_alternativa3(txt_tr, y_tr)
+    opt_alt4 = opt.optimizar_alternativa4(X384_tr, y_tr)
+    opt_alt5 = opt.optimizar_alternativa5(txt_tr, y_tr, opt_alt3["mejores_params"])
+
+    p2 = opt_alt2["mejores_params"]
+    p3 = opt_alt3["mejores_params"]
+    p4 = opt_alt4["mejores_params"]
+    p5 = opt_alt5["mejores_params"]
+
+    print(f"  -> Alt.2 (LogReg + 384D):       {p2} | CV F1-Macro={opt_alt2['cv_stats']['cv_f1_macro']:.4f}")
+    print(f"  -> Alt.3 (LogReg + TF-IDF Char):{p3} | CV F1-Macro={opt_alt3['cv_stats']['cv_f1_macro']:.4f}")
+    print(f"  -> Alt.4 (LogReg + 384D Bal.):  {p4} | CV F1-Min={opt_alt4['cv_stats']['cv_f1_min']:.4f}, F1-Macro={opt_alt4['cv_stats']['cv_f1_macro']:.4f}")
+    print(f"  -> Alt.5 (Síntesis Char Bal.):  {{'C': {p5['C']}, 'alpha_pesos': {p5['alpha_pesos']}}} | CV F1-Min={opt_alt5['cv_stats']['cv_f1_min']:.4f}, F1-Macro={opt_alt5['cv_stats']['cv_f1_macro']:.4f}")
+
+    # 3. Entrenar en Train (350) y evaluar limpiamente en Dev (75) y Test oficial (75)
+    print("\n[PASO 3/6] Entrenando modelos finales en Train (350) y evaluando en Dev (75) y Test oficial (75)...")
+    m1 = Alternativa1BaselineClustering(n_clusters=5, linkage="ward").fit(X384_tr, y_tr)
+    m2 = Alternativa2LogReg384D(C=p2["C"], random_state=RANDOM_SEED_OFICIAL).fit(X384_tr, y_tr)
+    m3 = Alternativa3LogRegTFIDFChar(
+        C=p3["C"], analyzer=p3["analyzer"], ngram_range=tuple(p3["ngram_range"]),
+        min_df=p3["min_df"], max_features=p3["max_features"],
+        limpiar_artefactos=p3["limpiar_artefactos"], random_state=RANDOM_SEED_OFICIAL,
+    ).fit(txt_tr, y_tr)
+    m4 = Alternativa4LogReg384DBalanced(
+        C=p4["C"], alpha_pesos=p4["alpha_pesos"], random_state=RANDOM_SEED_OFICIAL
+    ).fit(X384_tr, y_tr)
+    m5 = Alternativa5LogRegTFIDFCharBalanced(
+        C=p5["C"], alpha_pesos=p5["alpha_pesos"],
+        analyzer=p5["analyzer"], ngram_range=tuple(p5["ngram_range"]),
+        min_df=p5["min_df"], max_features=p5["max_features"],
+        limpiar_artefactos=p5["limpiar_artefactos"], random_state=RANDOM_SEED_OFICIAL,
+    ).fit(txt_tr, y_tr)
+
+    modelos = [m1, m2, m3, m4, m5]
+    resultados_dev = [evaluador.evaluar_modelo(m, X384_dev if m.tipo_entrada == "embeddings" else txt_dev, y_dev) for m in modelos]
+    resultados_test = [evaluador.evaluar_modelo(m, X384_te if m.tipo_entrada == "embeddings" else txt_te, y_te) for m in modelos]
+
+    def _a_dataframe(lista_res):
+        return pd.DataFrame([
+            {
+                "Alternativa": r["modelo_corto"],
+                f"F1_Min ({clase_minoritaria})": r["f1_minoritaria"],
+                "Rec_Min": r["recall_minoritaria"],
+                "F1_Macro": r["f1_macro"],
+                "F1_Weighted": r["f1_weighted"],
+                "Accuracy": r["accuracy"],
+                "Kappa": r["kappa"],
+                "AUC_Macro": r["roc_auc_macro"],
+                "AUC_Min": r["roc_auc_minoritaria"],
+                "AP_Min": r["ap_minoritaria"],
+            }
+            for r in lista_res
+        ])
+
+    df_dev = _a_dataframe(resultados_dev)
+    df_test = _a_dataframe(resultados_test)
+
+    print("\n=== TABLA 1A: VERIFICACIÓN INDEPENDIENTE EN DEV (seed=42, N=75) ===")
+    print(df_dev.to_string(index=False))
+    print("\n=== TABLA 1B: RESULTADOS FINALES EN TEST OFICIAL DEL EQUIPO (seed=42, N=75) ===")
+    print(df_test.to_string(index=False))
+    df_dev.to_csv(OUTPUT_DIR / "tabla_dev_oficial.csv", index=False)
+    df_test.to_csv(OUTPUT_DIR / "tabla_test_oficial.csv", index=False)
+
+    # 4. Estabilidad en 10 runs estratificados (Media ± StDev)
+    print(f"\n[PASO 4/6] Evaluando estabilidad estadística ({len(SEEDS_ESTABILIDAD)} runs estratificados)...")
+    df_runs, resumen_estabilidad = evaluador.evaluar_estabilidad_multirun(
+        textos_todos=textos_todos, X_384_todos=X384_todos, y_todos=y_todos,
+        params_alt2=p2, params_alt3=p3, params_alt4=p4, params_alt5=p5, semillas=SEEDS_ESTABILIDAD,
+    )
+    df_estab = pd.DataFrame.from_dict(resumen_estabilidad, orient="index")
+    cols_estab = [
+        "f1_minoritaria_mean", "f1_minoritaria_std",
+        "recall_minoritaria_mean", "recall_minoritaria_std",
+        "f1_macro_mean", "f1_macro_std",
+        "kappa_mean", "kappa_std",
+        "roc_auc_minoritaria_mean", "roc_auc_minoritaria_std",
+    ]
+    print("\n=== TABLA 2: ESTABILIDAD ESTADÍSTICA (10 RUNS — MEDIA ± STDEV) ===")
+    print(df_estab[cols_estab].to_string())
+    df_estab.to_csv(OUTPUT_DIR / "tabla_estabilidad_10runs.csv")
+    df_runs.to_csv(OUTPUT_DIR / "detalle_10runs.csv", index=False)
+
+    # 5. Experimento RQ1 (Robustez ante Ruido Léxico)
+    print("\n[PASO 5/6] Ejecutando Experimento RQ1 (Robustez ante Ruido Léxico: 0% a 30%)...")
+    sbert_encoder = RepresentadorSBERT384D(nombre_modelo=SBERT_MODEL_NAME)
+    exp_ruido = ExperimentoRobustezRuido(
+        evaluador=evaluador, modelo_tfidf=m3, modelo_sbert=m2, modelo_sbert_bal=m4,
+        sbert_encoder=sbert_encoder, modelo_tfidf_bal=m5,
+    )
+    df_ruido_det, df_ruido_res, caidas_rq1 = exp_ruido.ejecutar(
+        textos_test=txt_te, X_384_test_limpio=X384_te, y_test=y_te,
+        niveles_ruido=NIVELES_RUIDO_LEXICO, n_repeticiones=args.reps_ruido,
+    )
+    print("\n=== RESPUESTA RQ1 (Degradación relativa al 30% de ruido léxico) ===")
+    for mod, info in caidas_rq1.items():
+        print(
+            f"  * {mod:<22s} | F1-Macro: {info['f1_macro_0pct']:.4f} -> {info['f1_macro_30pct']:.4f} "
+            f"({info['delta_rel_f1_macro_pct']:+.1f}%)"
+        )
+    df_ruido_res.to_csv(OUTPUT_DIR / "tabla_ruido_lexico_rq1.csv", index=False)
+
+    # 6. Generar las 9 figuras 100% autoexplicativas (300 DPI)
+    print("\n[PASO 6/6] Generando 9 figuras autoexplicativas (300 DPI) para el póster DIN-A3...")
+    viz = VisualizadorPoster(carpeta_salida=FIGURES_DIR, clases=clases, clase_minoritaria=clase_minoritaria)
+
+    prevalencia_min_test = float(np.mean(y_te == clase_minoritaria))
+    clase_contraste = "Supportive" if "Supportive" in clases else str(clases[-1])
+    top_ng_min = m5.obtener_top_ngramas_unicos(clase_minoritaria, top_n=10)
+    top_ng_sup = m5.obtener_top_ngramas_unicos(clase_contraste, top_n=10)
+
+    rutas = [
+        viz.fig1_diagnostico_dataset_y_truncamiento(textos_todos, y_todos, limite_tokens_sbert=SBERT_MAX_TOKENS),
+        viz.fig2_comparativa_oficial(resultados_test),
+        viz.fig3_estabilidad_multirun(df_runs),
+        viz.fig4_matrices_confusion(resultados_test),
+        viz.fig5_roc_y_pr_minoritaria(resultados_test, prevalencia_min=prevalencia_min_test),
+        viz.fig6_desglose_clases_rq2(resultados_test),
+        viz.fig7_robustez_ruido_rq1(df_ruido_res, caidas_rq1),
+        viz.fig8_balanceo_y_sesgo_varianza(
+            opt_alt4["curva_alpha_cv"], p4["alpha_pesos"],
+            opt_alt4["curva_sesgo_varianza"], p4["C"],
+        ),
+        viz.fig9_interpretabilidad_logreg_char(top_ng_min, top_ng_sup),
+    ]
+    for i, rf in enumerate(rutas, start=1):
+        print(f"  {i}) {rf}")
+
+    informe = {
+        "autor": "Adrián",
+        "clase_minoritaria": clase_minoritaria,
+        "optimizacion_cv": {"alt2": opt_alt2, "alt3": opt_alt3, "alt4": opt_alt4, "alt5": opt_alt5},
+        "resultados_dev": resultados_dev,
+        "resultados_test_oficial": resultados_test,
+        "estabilidad_10runs": resumen_estabilidad,
+        "rq1_robustez_ruido": caidas_rq1,
+        "top_ngramas_minoritaria": top_ng_min,
+        "top_ngramas_supportive": top_ng_sup,
+    }
+    with open(OUTPUT_DIR / "resultados_completos_adrian.json", "w", encoding="utf-8") as f:
+        json.dump(informe, f, ensure_ascii=False, indent=2)
+
+    print("\n" + "=" * 82)
+    print(f" [OK] FINALIZADO EN {time.time() - t_inicio:.1f}s | Figuras en: {FIGURES_DIR}")
+    print("=" * 82)
 
 
 if __name__ == "__main__":
     main()
-
