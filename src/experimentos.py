@@ -1,5 +1,5 @@
 """
-text-clustering-MD: Experimentos Científicos y Evidencias Cuantitativas
+clinical-text-clustering: Experimentos Científicos y Evidencias Cuantitativas
 =============================================================================
 Aporta las evidencias experimentales exigidas explícitamente en el guión de prácticas
 y en las observaciones de la rúbrica de evaluación:

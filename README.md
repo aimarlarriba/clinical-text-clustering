@@ -1,6 +1,6 @@
 🌐 **Language / Idioma:** [English](README.md) • [Español](README.es.md)
 
-# text-clustering-MD: Unsupervised Clinical Text Clustering (Reddit C-SSRS)
+# clinical-text-clustering: Unsupervised Clinical Text Clustering (Reddit C-SSRS)
 
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Sentence-Transformers](https://img.shields.io/badge/SBERT-MiniLM--L6--v2-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black)](https://www.sbert.net/)
@@ -56,7 +56,7 @@ flowchart LR
 ## 📁 Project Structure
 
 ```text
-text-clustering-MD/
+clinical-text-clustering/
 │
 ├── data/                                 # Raw data (excluded from Git under NDA)
 │   ├── .gitkeep
@@ -140,8 +140,8 @@ Figures are exported to `data_processed/graficas_informe/`:
 
 1. Clone the repository and place `500_Reddit_users_posts_labels.csv` in `data/`:
    ```bash
-   git clone https://github.com/aimarlarriba/text-clustering-MD.git
-   cd text-clustering-MD
+   git clone https://github.com/aimarlarriba/clinical-text-clustering.git
+   cd clinical-text-clustering
    ```
 
 2. Create and activate a virtual environment:

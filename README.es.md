@@ -1,6 +1,6 @@
 🌐 **Language / Idioma:** [English](README.md) • [Español](README.es.md)
 
-# text-clustering-MD: Minería de Datos y Clustering No Supervisado de Texto Clínico
+# clinical-text-clustering: Minería de Datos y Clustering No Supervisado de Texto Clínico
 
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Sentence-Transformers](https://img.shields.io/badge/SBERT-MiniLM--L6--v2-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black)](https://www.sbert.net/)
@@ -55,7 +55,7 @@ flowchart LR
 ## 📁 Estructura del Proyecto
 
 ```text
-text-clustering-MD/
+clinical-text-clustering/
 │
 ├── data/                                 # Datos crudos (excluidos de Git por NDA)
 │   ├── .gitkeep
@@ -141,8 +141,8 @@ Las figuras se exportan automáticamente en `data_processed/graficas_informe/`:
 
 1. Clonar el repositorio y colocar `500_Reddit_users_posts_labels.csv` en `data/`:
    ```bash
-   git clone https://github.com/aimarlarriba/text-clustering-MD.git
-   cd text-clustering-MD
+   git clone https://github.com/aimarlarriba/clinical-text-clustering.git
+   cd clinical-text-clustering
    ```
 
 2. Crear y activar un entorno virtual:

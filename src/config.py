@@ -1,5 +1,5 @@
 """
-Configuración centralizada del proyecto text-clustering-MD.
+Configuración centralizada del proyecto clinical-text-clustering.
 Define rutas absolutas y relativas reproducibles, hiperparámetros por defecto
 y el mapeo de ontología clínica C-SSRS (Gaur et al., 2019).
 """

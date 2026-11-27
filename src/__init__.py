@@ -1,5 +1,5 @@
 """
-Paquete principal de text-clustering-MD:
+Paquete principal de clinical-text-clustering:
 Minería de datos y clustering aglomerativo no supervisado sobre posts clínicos de Reddit.
 
 Distribución de Responsabilidades por Paquetes y Módulos:

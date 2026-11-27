@@ -1,5 +1,5 @@
 """
-text-clustering-MD: Punto de Entrada Principal (Main Pipeline Orchestrator)
+clinical-text-clustering: Punto de Entrada Principal (Main Pipeline Orchestrator)
 =============================================================================
 Orquestador integral del proyecto de Minería de Datos / Text Clustering:
 1. Fase de Representación y Espacios Métricos (SBERT + Distancias Coseno / Euclídea).
@@ -181,7 +181,7 @@ def ejecutar_toy():
 
 def main():
     """
-    Punto de entrada principal para la orquestación integral del proyecto text-clustering-MD.
+    Punto de entrada principal para la orquestación integral del proyecto clinical-text-clustering.
 
     Pre-condiciones:
         - Argumentos CLI proporcionados a través de sys.argv (opciones de fase, hiperparámetros y rutas).
@@ -192,7 +192,7 @@ def main():
         - Retorna código de salida del proceso (0 en éxito, 1 ante fallos).
     """
     parser = argparse.ArgumentParser(
-        description="Pipeline integral de Text Clustering (text-clustering-MD)",
+        description="Pipeline integral de Text Clustering (clinical-text-clustering)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(

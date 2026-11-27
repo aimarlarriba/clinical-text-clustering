@@ -1,5 +1,5 @@
 """
-text-clustering-MD: Ejemplo de Ejecución Didáctico (Toy-Example)
+clinical-text-clustering: Ejemplo de Ejecución Didáctico (Toy-Example)
 =============================================================================
 Demostración paso a paso de los algoritmos y métricas desarrollados desde cero
 (Scratch) sobre un conjunto de datos sintéticos controlados.

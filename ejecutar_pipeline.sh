@@ -5,7 +5,7 @@
 set -e
 
 echo "======================================================================"
-echo " text-clustering-MD: Ejecutor de Pipeline Bash"
+echo " clinical-text-clustering: Ejecutor de Pipeline Bash"
 echo "======================================================================"
 
 PYTHON_CMD="python3"
