@@ -1,264 +1,204 @@
-# text-clustering-MD: Minería de Datos y Clustering No Supervisado de Texto Clínico
+🌐 **Language / Idioma:** [English](README.md) • [Español](README.es.md)
 
-> **Proyecto de Minería de Datos (Master / Grado en Inteligencia Artificial / Ciencia de Datos)**  
-> Implementación desde cero (*Scratch*) de algoritmos de clustering jerárquico aglomerativo (Lance-Williams 1967), embeddings densos contextuales (Sentence-BERT), validación interna/externa multidimensional, y perfilado semántico de temas clínicos en Reddit (C-SSRS).
+# text-clustering-MD: Unsupervised Clinical Text Clustering (Reddit C-SSRS)
 
----
+[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Sentence-Transformers](https://img.shields.io/badge/SBERT-MiniLM--L6--v2-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black)](https://www.sbert.net/)
+[![NumPy](https://img.shields.io/badge/NumPy-Scratch%20SAHN-013243?style=for-the-badge&logo=numpy&logoColor=white)](https://numpy.org/)
+[![UPV/EHU](https://img.shields.io/badge/UPV%2FEHU-Data%20Mining-1e3a8a?style=for-the-badge)](https://www.ehu.eus/)
 
-## 📋 Tabla de Contenidos
-1. [Descripción General](#-descripción-general)
-2. [Estructura del Proyecto](#-estructura-del-proyecto)
-3. [Fundamentos Teóricos y Científicos](#-fundamentos-teóricos-y-científicos)
-4. [Instalación y Requisitos](#-instalación-y-requisitos)
-5. [Guía de Ejecución](#-guía-de-ejecución)
-6. [Catálogo de Gráficas y Figuras Generadas](#-catálogo-de-gráficas-y-figuras-generadas)
-7. [Suite de Tests Unitarios](#-suite-de-tests-unitarios)
-8. [Referencias Bibliográficas](#-referencias-bibliográficas)
+> **Data Mining / Unsupervised Learning Project (UPV/EHU)**  
+> From-scratch implementation of Sequential Agglomerative Hierarchical Non-overlapping (SAHN) clustering via **Lance-Williams (1967)** recursive updates, contextual dense embeddings (**Sentence-BERT**), internal/external multidimensional validation, and semantic topic profiling on clinical Reddit timelines (**C-SSRS Corpus**, $N = 500$ users).
 
 ---
 
-## 🔬 Descripción General
-
-El objetivo de este proyecto es analizar, agrupar y caracterizar semánticamente publicaciones clínicas de usuarios de Reddit procedentes del corpus **Zenodo C-SSRS** (Gaur et al., 2019). 
-
-El sistema implementa un flujo completo de aprendizaje no supervisado sin dependencias de alto nivel para los algoritmos centrales:
-- **Representación vectorial**: Generación de representaciones semánticas densas contextuales de $384$ dimensiones mediante Sentence-BERT (`all-MiniLM-L6-v2`).
-- **Espacios métricos Scratch**: Cálculo vectorial optimizado en NumPy de matrices de proximidad (Distancia Coseno y Distancia Euclídea) y análisis empírico del fenómeno de pérdida de contraste en alta dimensionalidad (Aggarwal et al., 2001).
-- **Clustering Jerárquico Aglomerativo (SAHN) Scratch**: Algoritmo aglomerativo completo implementado con la fórmula recursiva de actualización de **Lance-Williams (1967)** con soporte para enlace simple (*Single*), completo (*Complete*) y promedio (*Average / UPGMA*).
-- **Validación Interna Objetiva**: Coeficiente de Correlación Cofenética (CPCC - Sokal & Rohlf 1962), perfilado de Silueta (*Silhouette Score*), compromiso Cohesión vs Separabilidad ($SSE$ / $BSS$) y análisis de índice de Dunn.
-- **Validación Externa y Correlación Clínica**: Rand Index, Jaccard Index, Fowlkes-Mallows, Pureza (*Clustering Accuracy* por voto mayoritario), Kappa de Cohen, Macro-F1 y matriz de confusión frente a las 5 clases clínicas reales de riesgo suicida C-SSRS.
-- **Validación Honesta Holdout e Inferencia**: Partición 80% Train / 20% Test, asignación por vecino más cercano de instancias no vistas y recuperación semántica de las $K$ publicaciones más próximas a un nuevo texto.
+## 📋 Table of Contents
+1. [Overview](#-overview)
+2. [Pipeline Architecture](#-pipeline-architecture)
+3. [Project Structure](#-project-structure)
+4. [Theoretical Foundations](#-theoretical-foundations)
+5. [Team Package Responsibilities](#-team-package-responsibilities)
+6. [Generated Figures Catalog](#-generated-figures-catalog)
+7. [Installation & Requirements](#-installation--requirements)
+8. [Quickstart CLI Guide](#-quickstart-cli-guide)
+9. [Toy Example](#-toy-example)
+10. [References](#-references)
 
 ---
 
-## 📁 Estructura del Proyecto
+## 🔬 Overview
 
-El repositorio está estructurado bajo las mejores prácticas de la ingeniería de software y ciencia de datos:
+This project analyzes, groups, and semantically characterizes clinical social media posts from the **Zenodo C-SSRS** corpus (Gaur et al., 2019), implementing core unsupervised algorithms from scratch without high-level clustering wrappers:
 
-```text
-text-clustering-MD/
-│
-├── data/                                 # Datos crudos (Raw Data)
-│   ├── .gitkeep
-│   └── 500_Reddit_users_posts_labels.csv # Dataset clínico anotado (C-SSRS)
-│
-├── data_processed/                       # Artefactos serializados y resultados
-│   ├── .gitkeep
-│   ├── embeddings_sbert.npy              # Matriz de embeddings densos (500 x 384)
-│   ├── etiquetas_reales.npy              # Clases de riesgo reales [0..4]
-│   ├── matriz_distancias_cosine.npy      # Matriz NxN de distancias Coseno
-│   ├── matriz_distancias_euclidean.npy   # Matriz NxN de distancias Euclídeas
-│   ├── textos_posts.json                 # Textos normalizados de cada usuario
-│   ├── comparativa_distancias.png        # Gráfica de contraste Coseno vs Euclídeo
-│   ├── metricas_espacios_y_profiling.json# Métricas y profiling O(N^2)
-│   │
-│   └── graficas_informe/                 # 9 Figuras científicas autoexplicativas
-│       ├── .gitkeep
-│       ├── fig1_cpcc_distorsion_lance_williams.png
-│       ├── fig2_curva_silhouette_picos.png
-│       ├── fig3_compromiso_sse_bss.png
-│       ├── fig4_perfil_silueta_k5_vs_k15.png
-│       ├── fig5_dendrograma_jerarquico_corte.png
-│       ├── fig6_mapa_pca_centroides.png
-│       ├── fig7_tabla_codebook_6x3_ventanas.png
-│       ├── fig8_correlacion_externa_k.png
-│       └── fig9_evidencias_dimension_y_normalizacion.png
-│
-├── src/                                  # Código fuente modular
-│   ├── __init__.py                       # Inicializador del paquete src
-│   ├── config.py                         # Configuración centralizada de rutas y constantes
-│   ├── embeddings.py                     # SBERT, distancias scratch y profiling O(N^2)
-│   ├── metricas_internas.py              # CPCC, Silueta, SSE/BSS, corte y dendrograma
-│   ├── evaluacion.py                     # Validación externa, Holdout, Codebook e inferencia
-│   ├── experimentos.py                   # Experimentos de dimensión, normalización y baselines
-│   │
-│   └── clustering/                       # Algoritmos de agrupamiento aglomerativo
-│       ├── __init__.py                   # Exportaciones del submódulo clustering
-│       ├── hierarchical.py               # MotorJerarquico (SAHN iterativo)
-│       └── lance_williams.py             # Parámetros y actualización de Lance-Williams
-│
-├── main.py                               # Orquestador principal CLI unificado
-├── toy_example.py                        # Demostración paso a paso (toy-example)
-├── pipeline.py                           # Pipeline de extracción y preprocesado
+* **Vector Representation:** Dense contextual embeddings in $\mathbb{R}^{384}$ via Sentence-BERT (`all-MiniLM-L6-v2`) with optional L2 normalization.
+* **Scratch Metric Spaces:** Vectorized NumPy computation of Cosine and Euclidean proximity matrices and empirical evaluation of distance concentration in high dimensions (Aggarwal et al., 2001).
+* **From-Scratch Hierarchical Clustering (SAHN):** Complete agglomerative engine implementing **Lance-Williams (1967)** recursive matrix updates (`single`, `complete`, `average` / UPGMA) producing canonical SciPy-compatible linkage matrices.
+* **Internal Validation:** Cophenetic Correlation Coefficient (`CPCC`), Silhouette Score & per-sample silhouette profile, Cohesion/Separation (`SSE`/`BSS`), Dunn Index, and unsupervised $K$ selection.
+* **External Validation & Clinical Alignment:** Rand, Jaccard, Fowlkes-Mallows, Purity (class-to-cluster accuracy), Cohen's Kappa, Macro-F1, and confusion matrices against the 5 C-SSRS risk levels.
+* **Leakage-Free Holdout & 1-NN Inference:** $80\%$ Train / $20\%$ Test split, centroid/1-NN assignment on unseen instances, semantic Codebook ($6\times3$ c-TF-IDF windows + prototype sentences), and interactive `--infer` retrieval.
 
-├── ejecutar_pipeline.ps1                 # Script de ejecución para Windows PowerShell
-├── ejecutar_pipeline.bat                 # Script de ejecución para Windows CMD
-├── ejecutar_pipeline.sh                  # Script de ejecución para Linux/macOS Bash
-├── requirements.txt                      # Dependencias del entorno de Python
-├── .gitignore                            # Exclusión de datos confidenciales y binarios
-└── README.md                             # Documentación técnica y académica
+---
+
+## 🏗️ Pipeline Architecture
+
+```mermaid
+flowchart LR
+    A["Reddit C-SSRS Corpus<br/>(N=500, 5 clinical levels)"] --> B["Sentence-BERT (384D)<br/>+ L2 Normalization"]
+    B --> C["Scratch Proximity Matrices<br/>Cosine & Euclidean O(N^2)"]
+    C --> D["MotorJerarquico (SAHN)<br/>Lance-Williams Updates"]
+    D --> E["Internal Validation<br/>CPCC, Silhouette, SSE/BSS, Dunn"]
+    D --> F["External Validation & Holdout<br/>Rand, Jaccard, Purity, Kappa, 80/20"]
+    F --> G["Semantic Codebook & 1-NN<br/>c-TF-IDF + PCA/t-SNE Plots"]
 ```
 
 ---
 
-## 🧠 Fundamentos Teóricos y Científicos
+## 📁 Project Structure
 
-1. **Ontología Clínica C-SSRS (Gaur et al., 2019 - WWW '19)**:
-   - El corpus clasifica a los usuarios en 5 niveles ordinales de riesgo:
-     `0: Indicator`, `1: Ideation`, `2: Behavior`, `3: Attempt`, `4: Supportive`.
-   - Permite contrastar de forma empírica si las agrupaciones semánticas no supervisadas reflejan la progresión clínica del riesgo.
-
-2. **Representaciones Contextuales SBERT (Reimers & Gurevych, 2019 - EMNLP)**:
-   - Se utiliza la arquitectura siamesa `all-MiniLM-L6-v2` para proyectar el texto en $\mathbb{R}^{384}$.
-   - A diferencia de TF-IDF clásico o BERT estándar por pares, SBERT permite codificar textos en tiempo lineal $O(N)$ y mantener una geometría semántica densa de alta calidad.
-
-3. **Contraste Métrico en Alta Dimensión (Aggarwal et al., 2001 - ICDT)**:
-   - En espacios de dimensión $D \ge 384$, la distancia euclídea sufre el fenómeno de concentración de distancias (pérdida de contraste relativo):
-     $$\lim_{D \to \infty} \frac{d_{max} - d_{min}}{d_{min}} \to 0$$
-   - La distancia del coseno demuestra un mayor contraste relativo y mayor inmunidad a la longitud del documento.
-
-4. **Fórmula Recursiva de Lance & Williams (1967)**:
-   - Permite recalcular la distancia entre un cluster fusionado $C_i \cup C_j$ y cualquier otro cluster $C_k$ en tiempo $O(1)$:
-     $$d(C_i \cup C_j, C_k) = \alpha_i \cdot d(C_i, C_k) + \alpha_j \cdot d(C_j, C_k) + \beta \cdot d(C_i, C_j) + \gamma \cdot |d(C_i, C_k) - d(C_j, C_k)|$$
-   - **Single Link**: $\alpha_i = 0.5, \alpha_j = 0.5, \beta = 0, \gamma = -0.5 \implies \min(d_{ik}, d_{jk})$
-   - **Complete Link**: $\alpha_i = 0.5, \alpha_j = 0.5, \beta = 0, \gamma = 0.5 \implies \max(d_{ik}, d_{jk})$
-   - **Average Link (UPGMA)**: $\alpha_i = \frac{n_i}{n_i + n_j}, \alpha_j = \frac{n_j}{n_i + n_j}, \beta = 0, \gamma = 0$
-
-5. **Coeficiente de Correlación Cofenética (CPCC - Sokal & Rohlf, 1962)**:
-   - Mide la correlación lineal de Pearson entre las distancias originales por pares $D_{ij}$ y las distancias cofenéticas $C_{ij}$ impuestas por el dendrograma en el momento de la primera fusión:
-     $$\text{CPCC} = \frac{\sum (D_{ij} - \bar{D})(C_{ij} - \bar{C})}{\sqrt{\sum (D_{ij} - \bar{D})^2 \sum (C_{ij} - \bar{C})^2}}$$
+```text
+text-clustering-MD/
+│
+├── data/                                 # Raw data (excluded from Git under NDA)
+│   ├── .gitkeep
+│   └── 500_Reddit_users_posts_labels.csv # Annotated clinical dataset (place here)
+│
+├── data_processed/                       # Serialized caches & outputs (excluded from Git)
+│   ├── .gitkeep
+│   ├── embeddings_sbert.npy              # Dense SBERT embeddings (500 x 384)
+│   ├── etiquetas_reales.npy              # Ground-truth C-SSRS labels
+│   ├── matriz_distancias_*.npy           # Cosine & Euclidean distance matrices
+│   ├── textos_posts.json                 # Cleaned user texts
+│   ├── metricas_espacios_y_profiling.json# Space contrast & O(N^2) profiling
+│   └── graficas_informe/                 # Publication-ready figures
+│
+├── src/                                  # Modular source code
+│   ├── __init__.py
+│   ├── config.py                         # Centralized paths, hyperparameters & C-SSRS map
+│   ├── embeddings.py                     # SBERT, scratch distances & O(N^2) profiling
+│   ├── metricas_internas.py              # CPCC, Silhouette, SSE/BSS, Dunn & dendrogram cut
+│   ├── evaluacion.py                     # External metrics, Holdout, Codebook & 1-NN inference
+│   ├── experimentos.py                   # Dimensionality, normalization & K-Means baselines
+│   └── clustering/                       # From-scratch agglomerative engine
+│       ├── __init__.py
+│       ├── hierarchical.py               # MotorJerarquico (iterative SAHN)
+│       └── lance_williams.py             # Lance-Williams coefficients & matrix update
+│
+├── main.py                               # Unified CLI orchestrator
+├── pipeline.py                           # Data loading & preprocessing pipeline
+├── toy_example.py                        # Step-by-step synthetic & text demonstration
+├── ejecutar_pipeline.ps1                 # Windows PowerShell launcher
+├── ejecutar_pipeline.bat                 # Windows CMD launcher
+├── ejecutar_pipeline.sh                  # Linux / macOS Bash launcher
+├── requirements.txt                      # Python dependencies
+├── .gitignore                            # Confidentiality & binary exclusions
+├── README.md                             # English documentation
+└── README.es.md                          # Spanish documentation
+```
 
 ---
 
-## 💻 Instalación y Requisitos
+## 🧠 Theoretical Foundations
 
-### Requisitos Previos
-- Python 3.10 o superior (compatible con Python 3.10, 3.11, 3.12 y 3.13).
+1. **C-SSRS Clinical Ontology (Gaur et al., 2019):** 5 clinical categories (`Indicator`, `Ideation`, `Behavior`, `Attempt`, `Supportive`) used exclusively in external post-hoc validation.
+2. **Dense Contextual Embeddings (Reimers & Gurevych, 2019):** `all-MiniLM-L6-v2` projects user posts into $\mathbb{R}^{384}$ in linear time $\mathcal{O}(N)$.
+3. **High-Dimensional Metric Contrast (Aggarwal et al., 2001):** In $D \ge 384$, Euclidean relative contrast $(d_{\max} - d_{\min}) / d_{\min}$ concentrates toward zero, whereas Cosine distance preserves better separability and length invariance.
+4. **Lance-Williams Recursive Formula (1967):** Updates cluster distances in $\mathcal{O}(1)$ per pair after merging $C_i \cup C_j$:
+   $$d(C_i \cup C_j, C_k) = \alpha_i d(C_i, C_k) + \alpha_j d(C_j, C_k) + \beta d(C_i, C_j) + \gamma |d(C_i, C_k) - d(C_j, C_k)|$$
+5. **Cophenetic Correlation (CPCC, Sokal & Rohlf, 1962):** Pearson correlation between original pairwise distances $D_{ij}$ and dendrogram cophenetic distances $C_{ij}$.
 
-### Pasos de Instalación
+---
 
-1. Clonar el repositorio:
+## 👥 Team Package Responsibilities
+
+| Team Member | Assigned Modules | Primary Technical Scope |
+|---|---|---|
+| **Aimar Larriba** | `main.py`, `src/embeddings.py`, `src/experimentos.py`, `src/config.py` | CLI orchestration, `--infer`, SBERT L2 embeddings, vectorized scratch distance matrices, Aggarwal contrast analysis, $\mathcal{O}(N^2)$ profiling, dimensionality/normalization experiments & K-Means baseline. |
+| **Adrián Ramírez** | `src/metricas_internas.py`, `src/clustering/lance_williams.py` | Lance-Williams updates (`single`, `complete`, `average`), scratch intrinsic metrics (CPCC, SSE/BSS, Silhouette, Dunn), and unsupervised $K$ peak selection. |
+| **Urko Horas** | `src/clustering/hierarchical.py`, `src/clustering/__init__.py`, `toy_example.py` | Iterative SAHN engine, SciPy-compatible linkage matrix, dendrogram cutting, and self-contained toy example. |
+| **María Fernández** | `src/evaluacion.py`, `pipeline.py` | External validation against C-SSRS, leakage-free $80/20$ Holdout, dual Train-Test confusion matrix, $6\times3$ c-TF-IDF Codebook, and 1-NN intra-cluster retrieval. |
+
+---
+
+## 📊 Generated Figures Catalog
+
+Figures are exported to `data_processed/graficas_informe/`:
+* `fig1_cpcc_distorsion_lance_williams.png` — CPCC & hierarchical distortion (`Single`, `Complete`, `Average`).
+* `fig2_curva_silhouette_picos.png` — Mean Silhouette curve across $k \in [2, \sqrt{N}]$.
+* `fig3_compromiso_sse_bss.png` — Cohesion ($SSE$) vs. Separation ($BSS$) trade-off.
+* `fig4_perfil_silueta_k5_vs_k15.png` — Per-sample Silhouette profile ($K=5$ vs. $\hat{k}=15$).
+* `fig5_dendrograma_jerarquico_corte.png` — Full & truncated dendrogram at exact cut height.
+* `fig6_mapa_pca_centroides.png` / `fig6a` / `fig6b` / `fig11` — PCA and t-SNE cluster projections.
+* `fig7_tabla_codebook_6x3_ventanas.png` — Semantic Codebook ($6\times3$ c-TF-IDF trigrams + prototypes).
+* `fig8_correlacion_externa_k.png` — External metrics vs. $K$.
+* `fig9_evidencias_dimension_y_normalizacion.png` — Dimension sweep ($D \in [2..384]$), TF-IDF vs. SBERT, and normalization.
+* `fig10_matriz_confusion_heatmap.png` — Dual Train ($N_1=400$) vs. Test ($N_2=100$) confusion matrix.
+* `comparativa_distancias.png` — Cosine vs. Euclidean contrast histogram.
+
+---
+
+## 💻 Installation & Requirements
+
+1. Clone the repository and place `500_Reddit_users_posts_labels.csv` in `data/`:
    ```bash
    git clone https://github.com/aimarlarriba/text-clustering-MD.git
    cd text-clustering-MD
    ```
 
-2. Crear y activar un entorno virtual:
-   - En **Windows (PowerShell)**:
+2. Create and activate a virtual environment:
+   * **Windows (PowerShell):**
      ```powershell
      python -m venv .venv
      .\.venv\Scripts\Activate.ps1
      ```
-   - En **Linux / macOS**:
+   * **Linux / macOS:**
      ```bash
      python3 -m venv .venv
      source .venv/bin/activate
      ```
 
-3. Instalar las dependencias:
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
 ---
 
-## 🚀 Guía de Ejecución
+## 🚀 Quickstart CLI Guide
 
-El proyecto ofrece múltiples alternativas de ejecución automatizada y multiplataforma:
-
-### Opción 1: Ejecución Completa con `main.py` (Recomendada)
-Ejecuta el flujo completo (embeddings, matrices de proximidad, clustering jerárquico, validación interna/externa, Holdout y generación de las 8 figuras):
 ```bash
+# Full pipeline
 python main.py
+
+# OS launchers
+.\ejecutar_pipeline.ps1   # Windows PowerShell
+ejecutar_pipeline.bat     # Windows CMD
+./ejecutar_pipeline.sh    # Linux / macOS
+
+# Modular execution
+python main.py --step embeddings --n_muestras 500
+python main.py --step evaluacion
+python main.py --step experimentos
+python main.py --infer "I feel completely exhausted and want to give up everything"
+python main.py --n_muestras 200
 ```
 
-### Opción 2: Ejecución según Sistema Operativo
-- **En Windows (PowerShell)**:
-  ```powershell
-  .\ejecutar_pipeline.ps1
-  ```
-- **En Windows (CMD)**:
-  ```cmd
-  ejecutar_pipeline.bat
-  ```
-- **En Linux / macOS**:
-  ```bash
-  chmod +x ejecutar_pipeline.sh
-  ./ejecutar_pipeline.sh
-  ```
-
-### Opción 3: Ejecución Modular por Fases
-- **Solo Fase 1 (Embeddings y Matrices de Distancia Scratch con Profiling)**:
-  ```bash
-  python main.py --step embeddings --n_muestras 500
-  ```
-- **Solo Fase 2 y 3 (Clustering, Validación, Holdout y Figuras)**:
-  ```bash
-  python main.py --step evaluacion
-  ```
-- **Fase de Experimentos (Dimensionalidad, Representaciones y Baseline KMeans)**:
-  ```bash
-  python main.py --step experimentos
-  ```
-- **Inferencia Interactiva sobre Texto Libre (1-NN Intra-Cluster)**:
-  ```bash
-  python main.py --infer "I feel completely exhausted and want to give up everything"
-  ```
-- **Ajustar el número de muestras**:
-  ```bash
-  python main.py --n_muestras 200
-  ```
-
 ---
 
-## 👥 Distribución de Responsabilidades por Paquetes de Software
+## 🧪 Toy Example
 
-En cumplimiento con los estándares de ingeniería de software y la rúbrica docente de evaluación por paquetes:
-
-| Miembro del Equipo | Módulos / Ficheros Asignados | Responsabilidad Técnica Principal |
-|---|---|---|
-| **Aimar Larriba** | `main.py`, `src/embeddings.py`, `src/experimentos.py`, `src/config.py` | Orquestación CLI completa, inferencia `--infer`, generación y normalización L2 de embeddings densos SBERT, matrices vectorizadas Scratch de proximidad (Coseno y Euclídea), análisis empírico de contraste de Aggarwal, profiling computacional $O(N^2)$ (distancias y Lance-Williams), experimentos multidimensionales y baseline comparativo con K-Means externo de Scikit-Learn. |
-| **Adrián Ramírez** | `src/metricas_internas.py`, `src/clustering/lance_williams.py` | Coeficientes y fórmulas recursivas de Lance-Williams (Single, Complete, Average), métricas intrínsecas Scratch (CPCC, Cohesión SSE, Separación BSS, Silueta media y perfil individual, índice de Dunn), optimización no supervisada de $K$ (búsqueda de picos locales). |
-| **Urko Horas** | `src/clustering/hierarchical.py`, `src/clustering/__init__.py`, `toy_example.py` | Motor aglomerativo SAHN iterativo Scratch, serialización de matriz de enlace *linkage* (formato SciPy), corte horizontal del dendrograma y demostración didáctica autocontenida paso a paso (*Toy Example*). |
-| **María Fernández** | `src/evaluacion.py`, `src/pipeline.py` | Validación externa Scratch frente a ontología clínica C-SSRS (Rand, Jaccard, Fowlkes-Mallows, Purity, Cohen's Kappa, Macro-F1 y Weighted F1), protocolo Holdout (Train 80% / Test 20%) sin fuga de etiquetas, matriz de confusión Heatmap dual Train-Test, perfilado semántico (Codebook 6x3 con c-TF-IDF y oraciones prototipo) y recuperación semántica 1-NN intra-cluster. |
-
----
-
-## 📊 Catálogo de Gráficas y Figuras Generadas
-
-Todas las figuras generadas se almacenan automáticamente en alta resolución en `data_processed/graficas_informe/`:
-
-| Figura | Archivo | Descripción Metodológica |
-|---|---|---|
-| **Fig. 1** | `fig1_cpcc_distorsion_lance_williams.png` | Comparativa de preservación métrica (CPCC) y distorsión jerárquica para Single, Complete y Average Linkage. |
-| **Fig. 2** | `fig2_curva_silhouette_picos.png` | Evolución de la silueta media en el rango $k \in [2, \sqrt{N}=22]$ con detección no supervisada de picos locales. |
-| **Fig. 3** | `fig3_compromiso_sse_bss.png` | Compromiso clásico entre Cohesión Interna ($SSE$) y Separabilidad Externa ($BSS$). |
-| **Fig. 4** | `fig4_perfil_silueta_k5_vs_k15.png` | Perfil detallado de silueta muestra a muestra comparando la partición clínica ($K=5$) vs la partición óptima descubierta ($k̂=15$). |
-| **Fig. 5** | `fig5_dendrograma_jerarquico_corte.png` | Dendrograma jerárquico completo y detalle truncado en el punto de corte horizontal exacto. |
-| **Fig. 6** | `fig6_mapa_pca_centroides.png` | Proyección bidimensional PCA de los clusters con centroides $m_j$ y etiquetas anticolisión. |
-| **Fig. 7** | `fig7_tabla_codebook_6x3_ventanas.png` | **Codebook Semántico**: Tabla formal con 6 ventanas de 3 palabras (trigramas c-TF-IDF) y la oración prototipo de cada centroide. |
-| **Fig. 8** | `fig8_correlacion_externa_k.png` | Curvas de validación externa (Rand, Jaccard, Fowlkes-Mallows, Purity, Cohen's Kappa, Macro-F1) en función de $K$. |
-| **Fig. 9** | `fig9_evidencias_dimension_y_normalizacion.png` | **Evidencias Experimentales**: Curva de calidad vs dimensión ($D \in [2..384]$), comparativa TF-IDF vs SBERT, y efecto de normalización en el contraste. |
-| **Fig. 10** | `fig10_matriz_confusion_heatmap.png` | **Matriz de Confusión Heatmap (Train vs Test)**: Comparativa dual en Train ($N_1=400$) y Test ($N_2=100$) evaluando generalización sin fuga de información (recuento absoluto y porcentaje normalizado por fila). |
-| **Extra** | `comparativa_distancias.png` | Histograma de contraste relativo y correlación entre Distancia Coseno y Euclídea (Aggarwal et al., 2001). |
-
----
-
-## 🧪 Ejemplo Didáctico de Ejecución (Toy-Example)
-
-Cumpliendo con la especificación del guión de prácticas (*"Ejecución: facilitar al usuario e.g. mediante ejemplo de ejecución e.g. (toy-example)"*), se incluye un script autocontenido que ejecuta paso a paso todas las rutinas *Scratch* sobre datos sintéticos en menos de 1 segundo:
-1. Actualización de matriz $3 \times 3$ con Lance-Williams (Single, Complete, Average).
-2. Ajuste del `MotorJerarquico` sobre $15$ muestras y visualización de la matriz de enlace.
-3. Corte del dendrograma y cálculo de CPCC, Silhouette y Dunn.
-4. Validación externa (Rand, Jaccard, Purity, Kappa, F1) frente a etiquetas reales de juguete.
-5. Inferencia de cluster y vecinos cercanos sobre una nueva instancia no vista.
-
-Para ejecutar la demostración:
+Self-contained verification of all from-scratch routines (Lance-Williams $3\times3$, `MotorJerarquico`, CPCC/Silhouette/Dunn, external metrics, 1-NN, and mini text corpus):
 ```bash
 python toy_example.py
-```
-o mediante el flag `--toy`:
-```bash
+# or:
 python main.py --toy
 ```
 
-
 ---
 
-## 📚 Referencias Bibliográficas
+## 📚 References
 
-- **Gaur, M., Alambo, A., Sain, J. P., Ugander, J., & Sheth, A. (2019)**. *"Knowledge-aware assessment of severity of suicide risk for early intervention"*. In The World Wide Web Conference (WWW '19), pp. 514–525.
-- **Lance, G. N., & Williams, W. T. (1967)**. *"A general theory of classificatory sorting strategies: 1. Hierarchical systems"*. The Computer Journal, 9(4), pp. 373–380.
-- **Reimers, N., & Gurevych, I. (2019)**. *"Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks"*. In Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing (EMNLP).
-- **Sokal, R. R., & Rohlf, F. J. (1962)**. *"The comparison of dendrograms by objective methods"*. Taxon, 11(2), pp. 33–40.
-- **Aggarwal, C. C., Hinneburg, A., & Keim, D. A. (2001)**. *"On the surprising behavior of distance metrics in high dimensional space"*. In International Conference on Database Theory (ICDT), pp. 420–434.
+* **Gaur, M., Alambo, A., Sain, J. P., Kursuncu, U., et al. (2019).** *Knowledge-aware assessment of severity of suicide risk for early intervention.* WWW '19, pp. 514–525.
+* **Lance, G. N., & Williams, W. T. (1967).** *A general theory of classificatory sorting strategies: 1. Hierarchical systems.* The Computer Journal, 9(4), 373–380.
+* **Reimers, N., & Gurevych, I. (2019).** *Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks.* EMNLP '19.
+* **Sokal, R. R., & Rohlf, F. J. (1962).** *The comparison of dendrograms by objective methods.* Taxon, 11(2), 33–40.
+* **Aggarwal, C. C., Hinneburg, A., & Keim, D. A. (2001).** *On the surprising behavior of distance metrics in high dimensional space.* ICDT '01, pp. 420–434.

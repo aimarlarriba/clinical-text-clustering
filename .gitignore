@@ -2,8 +2,10 @@
 # PROTECCIÓN DE DATOS CONFIDENCIALES (NDA / Acuerdo Ético de Investigación)
 # ==============================================================================
 # Ningún dato de pacientes/usuarios ni subproducto de datos debe rastrearse en Git.
-data/
-data_processed/
+data/*
+!data/.gitkeep
+data_processed/*
+!data_processed/.gitkeep
 downloads/
 raw_data/
 
