@@ -12,10 +12,7 @@ Uso:
 """
 
 import numpy as np
-from src.clustering.lance_williams import (
-    obtener_parametros_lance_williams,
-    actualizar_matriz_lance_williams,
-)
+from src.clustering.lance_williams import actualizar_matriz_lance_williams
 from src.clustering.hierarchical import MotorJerarquico
 from src.metricas_internas import (
     calcular_cpcc_scratch,
@@ -30,6 +27,7 @@ from src.evaluacion import (
 
 
 def ejecutar_toy_example():
+    """Ejecuta la demostración paso a paso de clustering jerárquico Scratch y texto."""
     print("=" * 70)
     print(" TOY-EXAMPLE: DEMOSTRACIÓN DE CLUSTERING JERÁRQUICO SCRATCH")
     print("=" * 70)

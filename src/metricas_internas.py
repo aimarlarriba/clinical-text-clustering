@@ -1,3 +1,9 @@
+"""
+Módulo de validación interna desde cero (Scratch): matriz cofenética y CPCC,
+Silhouette Score, cohesión/separabilidad (SSE/BSS), índice de Dunn, corte de
+dendrogramas y visualización jerárquica.
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -468,6 +474,7 @@ def dibujar_dendrograma_scratch(ax, matriz_linkage, altura_corte, truncar_en_cor
     nodos_truncados_id = {}
 
     def recorrer_dfs(nodo):
+        """Ordena las hojas de izquierda a derecha mediante recorrido en profundidad."""
         if truncar_en_corte and altura_nodo[nodo] <= altura_corte:
             # Este subárbol entero es uno de los K clusters debajo de la línea de corte
             primer_miembro = miembros_nodo[nodo][0]

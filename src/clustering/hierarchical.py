@@ -1,3 +1,5 @@
+"""Motor aglomerativo SAHN iterativo Scratch basado en actualizaciones de Lance-Williams."""
+
 import numpy as np
 import time
 try:

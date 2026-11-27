@@ -1,3 +1,9 @@
+"""
+Módulo de representación vectorial densa (Sentence-BERT), cálculo vectorizado Scratch
+de matrices de distancias (Coseno y Euclídea), análisis de contraste métrico (Aggarwal)
+y perfilado computacional O(N^2).
+"""
+
 import os
 import warnings
 import numpy as np

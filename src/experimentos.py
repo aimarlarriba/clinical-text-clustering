@@ -651,7 +651,7 @@ def ejecutar_todos_los_experimentos():
     print(" (Evidencias de Dimensión, Normalización, TF-IDF, Random, Interacción D x K y Baseline K-Means)")
     print("=" * 70)
 
-    from src.config import EMBEDDINGS_FILE, LABELS_FILE, POSTS_TEXT_FILE, METRICS_PROFILING_FILE
+    from src.config import EMBEDDINGS_FILE, LABELS_FILE, POSTS_TEXT_FILE
     if not EMBEDDINGS_FILE.exists() or not LABELS_FILE.exists() or not POSTS_TEXT_FILE.exists():
         print(f"[ERROR] No se encontraron los datos procesados en '{PROCESSED_DATA_DIR}'. Ejecuta 'python main.py' primero.")
         return None

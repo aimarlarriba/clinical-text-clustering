@@ -1,3 +1,5 @@
+"""Fórmula recursiva de Lance-Williams (1967) para enlaces single, complete y average."""
+
 import numpy as np
 
 

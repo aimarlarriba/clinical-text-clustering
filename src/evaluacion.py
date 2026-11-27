@@ -1,3 +1,8 @@
+"""
+Módulo de validación externa, protocolo Holdout, perfilado semántico (Codebook c-TF-IDF)
+e inferencia 1-NN intra-cluster para clustering jerárquico sobre texto clínico C-SSRS.
+"""
+
 import os
 import sys
 
@@ -16,8 +21,6 @@ try:
     from src.metricas_internas import (
         calcular_cpcc_scratch,
         calcular_silhouette_scratch,
-        calcular_sse_bss_scratch,
-        calcular_dunn_scratch,
         cortar_dendrograma_scratch,
         generar_graficas_validacion_interna,
         optimizar_hiperparametros_internos,
@@ -26,8 +29,6 @@ except (ImportError, ModuleNotFoundError):
     from metricas_internas import (
         calcular_cpcc_scratch,
         calcular_silhouette_scratch,
-        calcular_sse_bss_scratch,
-        calcular_dunn_scratch,
         cortar_dendrograma_scratch,
         generar_graficas_validacion_interna,
         optimizar_hiperparametros_internos,
